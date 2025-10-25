@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PharmacyDB — SQL Q&A</title>
+  <!-- Tailwind via CDN for fast iteration -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: "#2563eb" }
+          }
+        }
+      },
+      darkMode: 'media'
+    }
+  </script>
+  <style>
+    /* Small tweaks */
+    .code {
+      direction: ltr;
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .fade-in { animation: fadein .25s ease; }
+    @keyframes fadein { from {opacity: 0} to {opacity: 1} }
+    .spinner {
+      border: 3px solid rgba(0,0,0,0.1);
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      width: 28px; height: 28px;
+      animation: spin 0.8s ease infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    table { border-collapse: separate; border-spacing: 0; }
+    th, td { border-bottom: 1px solid #e5e7eb; }
+    tbody tr:hover { background: #f9fafb; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen">
+  <!-- Navbar -->
+  <header class="bg-white border-b sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-2xl bg-brand/10 flex items-center justify-center">
+          <span class="text-brand font-extrabold">DB</span>
+        </div>
+        <h1 class="text-lg sm:text-xl font-bold">PharmacyDB — SQL Q&A</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <div id="healthPill" class="px-3 py-1 rounded-full text-sm bg-gray-100">جاري الفحص…</div>
+        <a href="/docs" class="text-brand hover:underline text-sm">API Docs</a>
+        <a href="/redoc" class="text-brand hover:underline text-sm">ReDoc</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <!-- Left: Query panel -->
+      <section class="lg:col-span-3">
+        <div class="bg-white rounded-2xl shadow-sm border p-4 sm:p-6 fade-in">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 class="text-lg font-semibold">اسأل عن البيانات</h2>
+            <div class="flex items-center gap-2">
+              <button id="btnClear" class="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50">مسح</button>
+            </div>
+          </div>
+
+          <!-- Route tabs -->
+          <div class="flex flex-wrap gap-2 mb-4">
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer bg-gray-50">
+              <input type="radio" name="route" value="pattern" class="peer" checked />
+              <span>🔹 التعرف على الأنماط</span>
+            </label>
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer bg-gray-50">
+              <input type="radio" name="route" value="langchain" class="peer" />
+              <span>🤖 LangChain (Ollama)</span>
+            </label>
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer bg-gray-50">
+              <input type="radio" name="route" value="agents" class="peer" />
+              <span>🧠 Agents (Ollama)</span>
+            </label>
+            <div class="ms-auto flex items-center gap-2 text-sm">
+              <input id="chkSqlMode" type="checkbox" class="w-4 h-4">
+              <label for="chkSqlMode">وضع SQL اليدوي</label>
+            </div>
+          </div>
+
+          <!-- Question input -->
+          <div id="nlpBox" class="mb-4">
+            <label class="block text-sm mb-1">السؤال</label>
+            <textarea id="txtQuestion" rows="3" placeholder="اكتب سؤالك (مثال: أعطني أفضل 10 منتجات مبيعاً)"
+              class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/40"></textarea>
+          </div>
+
+          <!-- SQL input (manual) -->
+          <div id="sqlBox" class="mb-4 hidden">
+            <label class="block text-sm mb-1">SQL</label>
+            <textarea id="txtSql" rows="4" placeholder="SELECT ...;"
+              class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/40 code"></textarea>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <button id="btnRun" class="px-4 py-2 rounded-xl bg-brand text-white hover:bg-blue-600">تنفيذ</button>
+            <button id="btnCopySql" class="px-3 py-2 rounded-xl border hover:bg-gray-50">نسخ SQL</button>
+            <button id="btnDownloadCsv" class="px-3 py-2 rounded-xl border hover:bg-gray-50">تنزيل CSV</button>
+            <div id="runHint" class="text-sm text-gray-500"></div>
+          </div>
+
+          <!-- Plan (Agents) -->
+          <div id="planCard" class="hidden mb-4 bg-blue-50 border border-blue-100 rounded-xl p-3 text-sm leading-7"></div>
+
+          <!-- SQL output -->
+          <div class="mb-4">
+            <h3 class="text-sm font-semibold mb-1">الاستعلام:</h3>
+            <pre id="sqlOut" class="code bg-gray-900 text-gray-100 rounded-xl p-3 overflow-x-auto"></pre>
+          </div>
+
+          <!-- Summary -->
+          <div id="summary" class="text-sm text-gray-700 mb-1"></div>
+          <div id="metrics" class="text-xs text-gray-500 mb-3"></div>
+            
+          <!-- Results table -->
+          <div id="tableWrap" class="overflow-auto border rounded-xl">
+            <table class="min-w-full text-sm">
+              <thead id="tblHead" class="bg-gray-100"></thead>
+              <tbody id="tblBody" class="bg-white"></tbody>
+            </table>
+          </div>
+
+          <!-- Loader -->
+          <div id="loader" class="hidden fixed inset-0 bg-black/10 backdrop-blur-sm flex items-center justify-center z-30">
+            <div class="bg-white rounded-2xl px-6 py-5 shadow-lg flex items-center gap-3">
+              <div class="spinner"></div>
+              <div class="text-sm">جارٍ التنفيذ…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Presets -->
+      <aside class="lg:col-span-1">
+        <div class="bg-white rounded-2xl shadow-sm border p-4 sm:p-6 fade-in">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">📌 استعلامات جاهزة</h2>
+            <button id="btnRefreshPresets" class="text-sm text-brand hover:underline">تحديث</button>
+          </div>
+          <div id="presetsList" class="flex flex-col gap-2"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
