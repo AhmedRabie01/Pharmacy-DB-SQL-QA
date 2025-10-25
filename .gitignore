@@ -1,0 +1,19 @@
+# .gitignore
+.env
+.env.*
+!.env_example
+__pycache__/
+*.py[cod]
+*.sqlite3
+.DS_Store
+.vscode/
+.idea/
+.venv/
+env/
+venv/
+*.log
+dist/
+build/
+node_modules/
+*.coverage
+coverage/
