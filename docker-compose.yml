@@ -1,0 +1,14 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    environment:
+      DB_DRIVER: "{ODBC Driver 18 for SQL Server}"
+      DB_SERVER: "host.docker.internal"   # ← no ,1433 here
+      DB_PORT: "1433"
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"

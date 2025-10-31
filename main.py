@@ -1,43 +1,28 @@
-from __future__ import annotations
 from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from starlette.staticfiles import StaticFiles
 
-# keep absolute imports; --app-dir .. will make the parent visible
-from app.routers.query import router as query_router
 from app.core.config import settings
+from app.routers.query import router as query_router
 
-app = FastAPI(
-    title="PharmacyDB SQL API",
-    description="Pattern + LangChain (Ollama) + Agents (Ollama) routes for SQL Q&A.",
-    version="1.0.0",
-)
+app = FastAPI(title="PharmacyDB LLM API", version="1.0.0")
 
-# ---- CORS from .env ----
+origins = [o.strip() for o in (settings.cors_origins or "").split(",") if o.strip()] or ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---- API routes ----
 app.include_router(query_router)
 
-# ---- Frontend static (path-safe whether you run from root or from app/) ----
-BASE_DIR = Path(__file__).resolve().parent        # .../app
-FRONTEND_DIR = BASE_DIR / "frontend"              # .../app/frontend
+_frontend = Path(__file__).parent / "frontend"
+if _frontend.exists():
+    app.mount("/app", StaticFiles(directory=str(_frontend), html=True), name="frontend")
 
-if FRONTEND_DIR.exists():
-    app.mount("/app", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
-
-# Redirect root "/" -> "/app/" if frontend exists, otherwise health-ish response
 @app.get("/")
 def root():
-    if FRONTEND_DIR.exists():
-        return RedirectResponse(url="/app/")
-    return {"ok": True}
+    return {"name": "PharmacyDB LLM API", "db": settings.db_name, "model": settings.ollama_model, "status": "ok"}

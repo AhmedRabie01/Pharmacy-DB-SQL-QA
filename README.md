@@ -203,7 +203,13 @@ Examples included:
 Use `/api/presets` or run preset SQL through `/api/sql` (manual executor).
 
 ---
+## Docker (quick start)
 
+# from app/
+docker compose up --build
+# UI: http://localhost:8000/app/  | Docs: http://localhost:8000/docs
+# stop: docker compose down
+---
 ## 🚀 Deployment Notes
 
 - **Reverse proxy**: Serve via Nginx/IIS for TLS & compression.
