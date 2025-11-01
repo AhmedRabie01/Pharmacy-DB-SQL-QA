@@ -1,242 +1,218 @@
-# PharmacyDB SQL Q&A (FastAPI · LangChain/Ollama · Agents · Frontend)
+# PharmacyDB SQL Q&A
+_FastAPI · SQL Server · LangChain (Ollama) · Agents · Frontend · Docker_
 
-A production‑grade, Arabic‑first app to query a SQL Server **PharmacyDB** safely using three routes:
+A production-oriented, **Arabic-first** service that lets you ask questions about your **PharmacyDB** (SQL Server) and get real SQL results safely.
 
-- **Pattern (Rule-based)**: ultra-fast, curated SQL templates for common asks.
-- **LangChain (Ollama)**: strict SQL‑only prompting with sanitization & metrics.
-- **Agents (optional)**: planner → writer → tester with safe execution & fallback.
+It supports **three** ways to generate SQL:
 
-The app exposes a clean **REST API** and a lightweight **web UI**. It enforces **SELECT‑only**, returns **metrics** (tokens & timings), and includes an **Important Queries** pack (analytics presets).
+1. **Pattern (rule-based):** ultra-fast, deterministic SQL for common pharmacy questions.
+2. **LangChain (Ollama):** LLM → T-SQL → sanitize → execute.
+3. **Agents:** planner → writer → tester, with **automatic fallback** to the LangChain route.
+
+All routes return the **same JSON shape**, all of them enforce **SELECT-only**, and the project comes with a simple **web UI** at `/app`.
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-- **3 Generation Routes**
-  - Pattern (fast & deterministic)
-  - LangChain (LLM via Ollama, strict SQL‑only)
-  - Agents (planner/writer/tester with fallback to LangChain)
-- **Safety First**
-  - `SELECT`‑only enforcement
-  - SQL sanitizer: fixes table/column aliases & common mistakes
-  - TOP N injection for large result-sets
+- **3 SQL routes**
+  - **/api/pattern** → fastest, no LLM, but only for known questions.
+  - **/api/langchain** → LLM via Ollama, strict SQL-only prompt.
+  - **/api/agents** → multi-step LLM (plan → write → test) + fallback.
+- **Safety**
+  - SELECT-only guard (blocks INSERT/UPDATE/DELETE/EXEC/DDL).
+  - SQL sanitizer: normalize tables/columns, fix incomplete predicates.
+  - TOP injection to avoid huge result sets.
 - **DX / UX**
-  - Arabic‑first responses & errors
-  - Consistent success payload across routes
-  - Token counts & timing metrics (`llm_total_tokens`, `llm_duration_ms`, `total_ms`)
-  - Presets (ready analytics SQL)
-- **Deployment Friendly**
-  - `.env` driven config (DB + LLM + API)
-  - Robust static files mount
-  - Works from **project root** and **/app** with `--app-dir ..`
+  - Arabic error messages.
+  - Uniform response shape (columns + rows + summary + metrics).
+  - Preset (important) queries.
+- **Docker-ready**
+  - App runs in container.
+  - Connects to SQL Server on the **Windows host** via `host.docker.internal,1433`.
+  - Clear logging of Ollama errors.
+- **Configurable**
+  - `.env` driven (DB, LLM, CORS, preview size).
+  - Can run from project root or from `/app` using `--app-dir ..`.
 
 ---
 
 ## 🧱 Project Structure
 
-```
-app/
-├─ __init__.py
-├─ main.py
-├─ core/
-│  ├─ __init__.py
-│  └─ config.py                 # env-driven settings (+ s/m/h duration parsing)
-├─ db/
-│  ├─ __init__.py
-│  └─ session.py                # SQLAlchemy engine (SQL Server/pyodbc)
-├─ routers/
-│  ├─ __init__.py
-│  └─ query.py                  # unified endpoints: pattern / langchain / agents / sql / presets
-├─ schemas/
-│  ├─ __init__.py
-│  ├─ requests.py               # Pydantic request models
-│  └─ responses.py              # Pydantic response models (uniform payload)
-├─ services/
-│  ├─ __init__.py
-│  ├─ pattern.py                # rule-based SQL generator (Arabic/English triggers)
-│  ├─ langchain_sql.py          # LangChain + Ollama strict SQL-only chain
-│  ├─ agents.py                 # planner → writer → tester orchestrator
-│  ├─ llm.py                    # shared LLM helpers (prompts/extractors)
-│  └─ ollama_client.py          # raw Ollama HTTP client + timeouts/metrics
-├─ utils/
-│  ├─ __init__.py
-│  └─ sql_safety.py             # SELECT-only guard, TOP injection, common fixes
-├─ frontend/
-│  ├─ index.html                # lightweight static UI served at /app
-│  └─ app.js
-├─ presets.py                   # Important Queries (analytics pack)
-├─ .env_example                 # sample env (no secrets)
-├─ README.md
-└─ requirements.txt
+```text
+├─ app/
+│  ├─ main.py
+│  ├─ core/
+│  │  └─ config.py
+│  ├─ db/
+│  │  └─ session.py
+│  ├─ routers/
+│  │  └─ query.py
+│  ├─ services/
+│  │  ├─ pattern.py
+│  │  ├─ langchain_sql.py
+│  │  ├─ agents.py
+│  │  └─ ollama_client.py
+│  ├─ utils/
+│  │  └─ sql_safety.py
+│  ├─ schemas/
+│  │  ├─ requests.py
+│  │  └─ responses.py
+│  ├─ presets.py
+│  └─ frontend/
+│     ├─ index.html
+│     └─ app.js
+├─ Dockerfile
+├─ docker-compose.yml
+├─ requirements.txt
+└─ .env
+└─ .env_example
+
 
 ```
-
-> **Note**: The app supports starting from root (`uvicorn app.main:app`) and from `/app` using `--app-dir ..`.
 
 ---
 
 ## ⚙️ Requirements
 
 - Python 3.10+
-- SQL Server with ODBC Driver 17 (Windows)  
-- Ollama (local LLM server) with a compatible model (e.g., `qwen2.5-coder:latest`)
-
-**Python packages (excerpt):**
-```
-fastapi uvicorn pydantic pydantic-settings sqlalchemy pyodbc pandas
-langchain-community httpx
-```
+- SQL Server (2019/2021/2022) listening on 1433
+- ODBC Driver 17 or 18 for SQL Server
+- Ollama running locally with a SQL-friendly model
 
 ---
 
 ## 🔐 Environment (.env)
 
-See `.env_example` for all keys. Highlights:
-
 ```env
-# DB
-DB_SERVER=.
+DB_SERVER=host.docker.internal
+DB_PORT=1433
 DB_NAME=PharmacyDB
-DB_DRIVER={ODBC Driver 17 for SQL Server}
-DB_TRUSTED=true
-DB_USERNAME=
-DB_PASSWORD=
+DB_DRIVER={ODBC Driver 18 for SQL Server}
+DB_TRUSTED=false
+DB_USERNAME=sa
+DB_PASSWORD=YourStrong!Passw0rd
+DB_ENCRYPT=yes
+DB_TRUST_SERVER_CERT=yes
+DB_CONNECT_TIMEOUT=15
 
-# LLM (Ollama)
 OLLAMA_MODEL=qwen2.5-coder:latest
-OLLAMA_BASE_URL=           # empty -> http://127.0.0.1:11434
+OLLAMA_BASE_URL=
 OLLAMA_TEMPERATURE=0.0
 OLLAMA_NUM_PREDICT=128
-OLLAMA_TIMEOUT=10m         # accepts 30 / 45s / 10m / 1h
-OLLAMA_KEEP_ALIVE=15m      # accepts s/m/h
+OLLAMA_TIMEOUT=45s
+OLLAMA_KEEP_ALIVE=15m
 
-# API
 CORS_ORIGINS=http://localhost:3000
 PREVIEW_LIMIT=200
 ```
 
-> Durations like `10m`/`15m` are parsed into seconds by `app/core/config.py` validators.
+---
+
+## ▶️ Run (local, no Docker)
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+- UI → http://127.0.0.1:8000/app/
+- Docs → http://127.0.0.1:8000/docs
+- Health → GET http://127.0.0.1:8000/api/health
 
 ---
 
-## ▶️ Run
+## 🐳 Docker
 
-### Option A — from **project root** (recommended)
-```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
+1. Make sure SQL Server is listening on 1433 on Windows:
 
-### Option B — from inside **/app**
-```bash
-uvicorn --app-dir .. app.main:app --reload --host 127.0.0.1 --port 8000
-```
+   ```powershell
+   netstat -ano | findstr 1433
+   ```
 
-> Health check: `GET http://127.0.0.1:8000/api/health` (if present).  
-> Open UI (if bundled): `http://127.0.0.1:8000/app/`
+2. Allow Windows firewall:
+
+   ```powershell
+   netsh advfirewall firewall add rule name="Allow SQL 1433" dir=in action=allow protocol=TCP localport=1433
+   ```
+
+3. Build and run:
+
+   ```bash
+   docker compose up --build
+   ```
+
+4. Open:
+   - UI:   http://localhost:8000/app/
+   - Docs: http://localhost:8000/docs
+
+**Notes**
+
+- Container reaches SQL Server via `host.docker.internal,1433`
+- If Ollama runs on the host → set `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+- If Ollama returns bad JSON → app will log it and return a clean API error
 
 ---
 
-## 🔗 API (Success Response Shape)
+## 🔗 API Endpoints
 
-All generation routes return the **same JSON** on success:
+- `GET  /api/health`
+- `POST /api/pattern`
+- `POST /api/langchain`
+- `POST /api/agents`
+- `POST /api/run-sql`
+- `GET  /api/presets`
+- `POST /api/presets/run?name=...`
+
+All of them return the same JSON on success:
 
 ```json
 {
-  "sql": "SELECT TOP 10 ...;",
-  "columns": ["ProductCode", "ProductName", "TotalSold"],
-  "rows": [{ "ProductCode": "A1", "ProductName": "Panadol", "TotalSold": 325 }],
-  "summary_ar": "عدد الصفوف المعروضة: 10 | الأعمدة: ProductCode, ProductName, TotalSold",
+  "route": "langchain",
+  "sql": "SELECT TOP 50 ...;",
+  "columns": ["ProductCode", "ProductName"],
+  "rows": [],
+  "summary_ar": "عدد الصفوف المعروضة: 0 | الأعمدة: ProductCode, ProductName",
   "model": "qwen2.5-coder:latest",
-  "llm_prompt_tokens": 42,
-  "llm_eval_tokens": 128,
-  "llm_total_tokens": 170,
-  "llm_duration_ms": 180,
-  "total_ms": 360,
+  "llm_prompt_tokens": 0,
+  "llm_eval_tokens": 0,
+  "llm_total_tokens": 0,
+  "llm_duration_ms": 0,
+  "total_ms": 0,
   "via_fallback": false
 }
 ```
 
-**Error response:**
+---
 
-```json
-{ "detail": "رسالة خطأ عربية واضحة بدون stack trace..." }
-```
+## 🛡️ Safety
 
-### Endpoints (examples)
-- `POST /api/pattern` → `{ question }` → SQL + results (204 if no pattern match)
-- `POST /api/langchain` → `{ question }` → SQL + results
-- `POST /api/agents` → `{ question }` → SQL + results (fallback to langchain on timeout)
-- `POST /api/sql` → `{ sql }` → execute a manual SELECT safely
-- `GET  /api/presets` → list of preset queries
-- `GET  /api/presets/{id}` → preset SQL
+- SELECT-only (blocked: INSERT, UPDATE, DELETE, EXEC, DDL…)
+- SQL sanitizer fixes:
+  - wrong synonyms like `QuantitySelling` → `QuantitySold`
+  - missing date in `WHERE Date >=` → fill with `GETDATE()`
+  - missing `TOP` → inject `TOP 200`
+- Then we trim to `PREVIEW_LIMIT` so UI doesn’t break
 
 ---
 
-## 🛡️ Safety & SQL Rules
+## 🧠 Integrations
 
-- **SELECT‑only**: requests with non‑SELECT are rejected server‑side.
-- **Sanitizer**: fixes common issues (wrong column name synonyms, incomplete date conditions, missing `TOP`, etc.).
-- **Aliases & GROUP BY**: enforced for joins/aggregations to ensure stable columns.
-
-> Tip: If you pass a bad column (e.g., `QuantitySelling`), the sanitizer maps it to `QuantitySold` or returns a clean error in Arabic.
-
----
-
-## 🧠 LLM / Agents
-
-- **LangChain** uses `langchain_community.llms.Ollama` with a strict SQL‑only prompt and extraction (regex).
-- **Agents** (optional) orchestrate planner → writer → tester with hard timeouts and **automatic fallback** to LangChain if the LLM stalls or doesn’t return valid SQL.
-
-> Metrics are gathered from Ollama responses and wall‑clock timers; returned to the client for observability.
+- **SQL Server** → main data
+- **Ollama** → LLM for langchain + agents
+- **Docker** → to run the API in container and still talk to host SQL Server
+- **Any frontend** → call JSON
+- **Nginx / IIS** → reverse proxy + TLS
 
 ---
 
-## 📊 Presets (Important Queries Pack)
+## 📦 Git / CI
 
-Examples included:
-- Monthly revenue
-- Top 10 products by revenue
-- Bought-not-sold in the last 90 days
-- Store performance by revenue
-- Low stock alerts (`Quantity <= 5`)
-
-Use `/api/presets` or run preset SQL through `/api/sql` (manual executor).
+- Commit this README as `README.md`
+- Add `.env_example` (no secrets)
+- CI can just run `docker compose build` to test
 
 ---
-## Docker (quick start)
-
-# from app/
-docker compose up --build
-# UI: http://localhost:8000/app/  | Docs: http://localhost:8000/docs
-# stop: docker compose down
----
-## 🚀 Deployment Notes
-
-- **Reverse proxy**: Serve via Nginx/IIS for TLS & compression.
-- **Windows service**: Use NSSM or `pywin32` to run Uvicorn as a service.
-- **Logging**: Log Arabic errors and a compact per‑request timing; avoid stack traces in responses.
-- **CORS**: Restrict `CORS_ORIGINS` on production.
-
----
-
-## 🧪 Testing
-
-- **Unit**: patterns → expected SQL; safety rejects non‑SELECT; sanitizer mappings.
-- **Integration**: real DB with a small fixture; confirm result shapes & metrics.
-- **Load**: 10–20 concurrent users; monitor `total_ms` and error rate (<1%).
-
----
-
 
 ## 📄 License
 
-Proprietary — internal use only (customize to your needs).
-
----
-
-## 🙌 Credits
-
-- FastAPI, Pydantic v2, SQLAlchemy, Pandas  
-- LangChain Community + Ollama  
-- Everyone who loves clean APIs and safe SQL 😄
-
+Private / internal.
