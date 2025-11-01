@@ -181,20 +181,6 @@ All of them return the same JSON on success:
   "via_fallback": false
 }
 ```
-
----
-
-## 🛡️ Safety
-
-- SELECT-only (blocked: INSERT, UPDATE, DELETE, EXEC, DDL…)
-- SQL sanitizer fixes:
-  - wrong synonyms like `QuantitySelling` → `QuantitySold`
-  - missing date in `WHERE Date >=` → fill with `GETDATE()`
-  - missing `TOP` → inject `TOP 200`
-- Then we trim to `PREVIEW_LIMIT` so UI doesn’t break
-
----
-
 ## 🧠 Integrations
 
 - **SQL Server** → main data
@@ -204,15 +190,6 @@ All of them return the same JSON on success:
 - **Nginx / IIS** → reverse proxy + TLS
 
 ---
-
-## 📦 Git / CI
-
-- Commit this README as `README.md`
-- Add `.env_example` (no secrets)
-- CI can just run `docker compose build` to test
-
----
-
 ## 📄 License
 
 Private / internal.
